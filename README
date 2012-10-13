@@ -1,0 +1,174 @@
+cre8PropelActAsCroppableBehaviorPlugin
+==========================
+
+This plugin allows you to effortlessly add image editing capabilities to your
+admin generator backend. You'll be able to add images to your models and be
+presented with the awesome Jcrop (http://deepliquid.com/content/Jcrop.html)
+jQuery plugin.
+
+
+Features
+--------
+
+The plugin already has a few very useful features
+
+* Create as many different sized crops of each of your image fields as you like
+* Add any amount of coloured padding around the croppable image
+* Fix the aspect ratio of the cropper to add consistency to your images'
+  dimensions
+* Change the directory that uploaded images are stored in
+* Use the getImageSrc() or getImageTag() method in your frontend app to easily display your
+  neatly cropped images
+
+Installation
+------------
+
+To install the plugin for a symfony project, the usual process is to use the
+symfony command line:
+
+    php symfony plugin:install cre8PropelActAsCroppableBehaviorPlugin
+
+sfDoctrineJCroppablePlugin depends on the excellent sfImageTransformPlugin, but
+until I can figure out how to specify that dependency in the package then you'll
+have to install it yourself (it's getting late!)
+
+    php symfony plugin:install sfImageTransformPlugin
+
+Usage
+-----
+In config.propel.ini add line:
+
+propel.behavior.croppable.class = plugins.cre8PropelActAsCroppableBehaviorPlugin.lib.propel.behavior.Cre8PropelCroppableBehavior
+
+
+You'll first want to edit config/schema.yml to add the behaviour to one
+of your models:
+
+  book:
+    id:            ~
+    title:         { type: varchar(100), required: true, index: unique }
+    _propel_behaviors:
+      croppable: { images: cover|inside }
+
+You need separate coulumns (images) you want to add to your model with | sign.
+
+
+If you don't specify columns there will be generated one column named "image"
+
+    _propel_behaviors:
+      croppable: ~
+
+Here we have told the plugin we want two jcroppable image field called cover and inside.
+The plugin will take care of the creation of the relevant fields in the book
+table.
+
+Now we've updated/created our schema, we can tell symfony to rebuild our
+database.
+
+Caution! This step will erase any data in the database that is not included in any
+fixtures:
+
+    php symfony propel:build-all
+
+Next let's configure sfImageTransform to use the gd library and to auto-detect
+images' mime-types (apps/APP_NAME/config/app.yml)
+
+    all:
+      sfImageTransformPlugin:
+        default_adapter: GD
+        mime_type:
+          auto_detect: true
+          library: gd_mime_type
+
+If you haven't aleady done so let's create an admin module for our book model:
+
+   symfony propel:generate-module --with-show --non-verbose-templates frontend book Book
+
+The plugin also depends on the jquery & jcrop libraries, so you must download
+them (http://deepliquid.com/content/Jcrop.html) and place the two js files
+(jquery.Jcrop.min.js & jquery.min.js) in web/js, and the css file
+(jquery.Jcrop.css) in web/css:
+
+    web/js/jquery.min.js
+    web/js/jquery.Jcrop.min.js
+    web/css/jquery.Jcrop.css
+
+Or just run command to make a link in web directory:
+
+    symfony plugin:publish-assets
+
+Now we need to tell our module's view to include them. We can do this
+specifically for our module by editing
+apps/APP_NAME/modules/book/config/view.yml, or for the whole application by
+editing apps/APP_NAME/config/view.yml:
+
+    default:
+      javascripts:    [/cre8PropelActAsCroppableBehaviorPlugin/js/jquery.min.js, /cre8PropelActAsCroppableBehaviorPlugin/js/jquery.Jcrop.min.js]
+      stylesheets:    [/cre8PropelActAsCroppableBehaviorPlugin/css/jquery.Jcrop.css]
+
+We're almost finished now! Just two things left to do. First we have to
+configure the widget & validator for our jcroppable image field. Add the
+following calls to configure the widgets & validators to the form's configure
+function (lib/form/BookForm.class.php):
+
+    public function configure()
+    {
+      $this->getObject()->configureJCropWidgets($this);
+      $this->getObject()->configureJCropValidators($this);
+    }
+
+And finally create the upload directory for the images to be stored in and make
+them writeable:
+
+    mkdir -p web/uploads/images/Book
+    chmod 777 web/uploads/images/Book
+
+That's it! Now if you followed the instructions carefully then you should be
+able to aim your browser at the backend app's book module and add a few
+people and their mug shots.
+
+To show the images in your frontend templates, simply pass a Book object, and
+call the getImageSrc() or the getImageTag() function, passing the desired image
+& size, eg
+
+    <img src="<?php echo $book->getImageSrc('image', 'thumb') ?>" alt="My image" />
+
+or
+
+    <?php echo $book->getImageTag('book', 'thumb') ?>
+
+Configuration
+-------------
+
+Now the above example has used a load of default values which you'll almost
+definitely want to configure. Here's an example of some config you can place in
+your config/app.yml:
+
+    all:
+      cre8PropelActAsCroppableBehaviorPlugin:
+        models:
+          Book:
+            directory:    books
+            images:
+              image:
+                editable:   { width: 600, height: 700 }
+                padding:    { percent: 35, color: #ffffff }
+                ratio:      1.5
+                sizes:
+                  thumb:    { width: 450 }
+                  main:     { width: 675 }
+
+Let's run through these options:
+* editable - overrides default (max) size of image during edition (cropp).
+    Default sizes max width: 600px and max height: 700 
+* directory - overrides the default web/uploads/images/bool to instead be
+    web/uploads/books
+* padding - adds padding to the image, of the specified color, using either a
+    'percent' or 'pixels' value
+* ratio - fixes the aspect ratio of the cropper and therefore the generated
+    cropped images
+* sizes - allows you to specify any number of different sized images to be
+    created. You specify the width and the height will be calculated using the
+    ratio if there is one, otherwise it will be variable according to the
+    selected crop. The default sizes are thumb (width 120px) &
+    main (width 360px)
